@@ -27,12 +27,13 @@ const ctx = canvas.getContext("2d");
 
 let sepet = {x:180, y:420, w:60, h:30};
 let puan=0, kalp=2, asama=1;
-let hiz=2;
+let hiz=3;
 let oyunAktif=false;
 let baslamaEkrani=true;
 let asamaBasladi=false;
 
-let sayilar = []; // Ekrandaki düşen sayılar
+let sayilar = []; // Düşen sayılar
+let siyahToplar = []; // Hasar veren toplar
 
 const arkaPlanRenk="#87CEEB";
 const toprakRenk="#8B4513";
@@ -40,39 +41,41 @@ const toprakY=450;
 
 // Rastgele sayı oluştur
 function rastgeleSayi() {
-  let deger, dogru;
-  if(asama===1){ // Doğal sayılar
-    deger=Math.floor(Math.random()*10);
-    dogru=true;
-  } else if(asama===2){ // Tam sayılar
-    deger=Math.floor(Math.random()*21)-10;
-    dogru=true;
-  } else { // Rasyonel sayılar
-    deger=(Math.random()*4-2).toFixed(1);
-    dogru=true;
-  }
-  return {x:Math.random()*350, y:-20, deger:deger, dogru:dogru};
+  let deger;
+  if(asama===1){ deger=Math.floor(Math.random()*10); }
+  else if(asama===2){ deger=Math.floor(Math.random()*21)-10; }
+  else { deger=(Math.random()*4-2).toFixed(1); }
+  return {x:Math.random()*350, y:-20, deger:deger};
 }
 
-// Ekrana sayılar ekle
+// Sayıları oluştur (sıralı, 2 sayı)
 function sayilariOlustur(){
   sayilar=[];
-  let adet = Math.floor(Math.random()*4)+2; // 2-5 sayı
   let pozisyonlar=[];
-  for(let i=0;i<adet;i++){
-    let yeniSayi;
-    do{
-      yeniSayi = rastgeleSayi();
-    }while(pozisyonlar.some(p=>Math.abs(p-yeniSayi.x)<50));
-    pozisyonlar.push(yeniSayi.x);
-    sayilar.push(yeniSayi);
-  }
-  // 1 tane yanlış/hasar veren sayı ekle
-  let idx = Math.floor(Math.random()*sayilar.length);
-  sayilar[idx].dogru=false;
-}
+  // İlk sayı
+  let s1 = rastgeleSayi();
+  pozisyonlar.push(s1.x);
+  sayilar.push(s1);
 
-sayilariOlustur();
+  // 1 saniye sonra ikinci sayı
+  setTimeout(()=>{
+    let s2;
+    do { s2 = rastgeleSayi(); } 
+    while(pozisyonlar.some(p=>Math.abs(p-s2.x)<50));
+    sayilar.push(s2);
+  }, 1000);
+
+  // Siyah hasar topları spawn
+  siyahToplar=[];
+  pozisyonlar=[];
+  for(let i=0;i<2;i++){
+    let t;
+    do{ t = {x:Math.random()*350, y:-20, r:10}; } 
+    while(pozisyonlar.some(p=>Math.abs(p-t.x)<50));
+    pozisyonlar.push(t.x);
+    siyahToplar.push(t);
+  }
+}
 
 // Çizim
 function ciz(){
@@ -97,13 +100,21 @@ function ciz(){
   // Sepet
   ctx.fillStyle="#FF8C00";
   ctx.fillRect(sepet.x,sepet.y,sepet.w,sepet.h);
-  ctx.fillStyle="#FFB74D"; // Tente
+  ctx.fillStyle="#FFB74D"; // tente
   ctx.fillRect(sepet.x-5,sepet.y-15,sepet.w+10,10);
 
   // Sayılar
   ctx.font="30px Arial";
   ctx.fillStyle="#1565c0";
   sayilar.forEach(s=> ctx.fillText(s.deger,s.x,s.y));
+
+  // Siyah toplar
+  siyahToplar.forEach(t=>{
+    ctx.fillStyle="black";
+    ctx.beginPath();
+    ctx.arc(t.x,t.y,t.r,0,Math.PI*2);
+    ctx.fill();
+  });
 
   // Kalpler ve puan
   ctx.fillStyle="red";
@@ -125,21 +136,33 @@ function ciz(){
 // Güncelleme
 function guncelle(){
   if(!oyunAktif) return;
+
+  // Sayıları düşür
   sayilar.forEach(s=>{
     s.y+=hiz;
-    // Sepete değdi mi?
     if(s.y>sepet.y-20 && s.x>sepet.x-10 && s.x<sepet.x+sepet.w+10){
-      if(s.dogru) puan+=10; else kalp--;
+      puan+=10;
       sayilar = sayilar.filter(x=>x!==s);
-    } 
-    // Zemine değdi mi?
+    }
     else if(s.y>toprakY){
-      if(s.dogru) puan-=10; else kalp--;
+      puan-=10;
       sayilar = sayilar.filter(x=>x!==s);
     }
   });
 
-  if(sayilar.length==0) sayilariOlustur();
+  // Siyah topları düşür
+  siyahToplar.forEach(t=>{
+    t.y+=hiz;
+    if(t.y>sepet.y-10 && t.x>sepet.x-10 && t.x<sepet.x+sepet.w+10){
+      kalp--;
+      siyahToplar = siyahToplar.filter(x=>x!==t);
+    } 
+    else if(t.y>toprakY){
+      siyahToplar = siyahToplar.filter(x=>x!==t);
+    }
+  });
+
+  if(sayilar.length==0 && siyahToplar.length==0) sayilariOlustur();
 
   document.getElementById("puan").innerText=puan;
   document.getElementById("kalp").innerText=kalp;
@@ -192,7 +215,7 @@ canvas.addEventListener("click",()=>{
     baslamaEkrani=false;
     oyunAktif=true;
     if(!asamaBasladi){
-      puan=0; kalp=2; hiz=2;
+      puan=0; kalp=2; hiz=3;
       document.getElementById("puan").innerText=puan;
       document.getElementById("kalp").innerText=kalp;
       document.getElementById("asama").innerText=asama;
@@ -202,5 +225,8 @@ canvas.addEventListener("click",()=>{
   }
 });
 </script>
+</body>
+</html>
+
 </body>
 </html>
