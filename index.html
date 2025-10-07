@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sayı Sepeti Oyunu</title>
+<style>
+  body { margin:0; overflow:hidden; font-family:sans-serif; }
+  canvas { display:block; margin:auto; margin-top:20px; border:3px solid #ff9800; }
+  #bilgi { text-align:center; font-size:18px; color:#333; }
+  #yapan { font-size:16px; color:#555; margin-top:-10px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<div id="bilgi">
+  <h2>🎯 Sayı Sepeti Oyunu</h2>
+  <div id="yapan">Yapan: <strong>Mete ÜLKER</strong></div>
+  <p>Aşama: <span id="asama">1</span> | ❤️ <span id="kalp">3</span> | Puan: <span id="puan">0</span></p>
+</div>
+
+<canvas id="oyun" width="400" height="500"></canvas>
+
+<script>
+const canvas = document.getElementById("oyun");
+const ctx = canvas.getContext("2d");
+
+let sepet = {x:180, y:420, w:50, h:30};
+let sayi = {x:200, y:-20, deger:0};
+let puan=0, kalp=3, asama=1;
+let hiz=2, aktif=true;
+
+const arkaPlanRenk="#87CEEB"; // gökyüzü
+const toprakRenk="#8B4513";
+const toprakY=450;
+
+function yeniSayi() {
+  if(asama===1) sayi.deger=Math.floor(Math.random()*10);
+  else if(asama===2) sayi.deger=Math.floor(Math.random()*21)-10;
+  else sayi.deger=(Math.random()*4-2).toFixed(1);
+  sayi.x=Math.random()*350;
+  sayi.y=-20;
+}
+yeniSayi();
+
+function ciz() {
+  ctx.fillStyle=arkaPlanRenk;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=toprakRenk;
+  ctx.fillRect(0,toprakY,canvas.width,canvas.height-toprakY);
+  ctx.fillStyle="#FF8C00";
+  ctx.fillRect(sepet.x,sepet.y,sepet.w,sepet.h);
+  ctx.fillStyle="#1565c0";
+  ctx.font="20px Arial";
+  ctx.fillText(sayi.deger,sayi.x,sayi.y);
+  if(!aktif){ ctx.fillStyle="red"; ctx.font="30px Arial"; ctx.fillText("Oyun Bitti!",100,250); }
+}
+
+function guncelle() {
+  if(!aktif) return;
+  sayi.y+=hiz;
+  if(sayi.y>sepet.y-10 && sayi.x>sepet.x-10 && sayi.x<sepet.x+sepet.w){
+    let dogru=false;
+    if(asama===1 && sayi.deger>=0 && Number.isInteger(Number(sayi.deger))) dogru=true;
+    if(asama===2 && Number.isInteger(Number(sayi.deger))) dogru=true;
+    if(asama===3) dogru=true;
+    if(dogru) puan+=10; else kalp--;
+    document.getElementById("puan").innerText=puan;
+    document.getElementById("kalp").innerText=kalp;
+    if(kalp<=0) aktif=false;
+    if(puan>=200){
+      asama++;
+      if(asama>3) aktif=false;
+      else{
+        puan=0;
+        kalp=3;
+        hiz+=1;
+        document.getElementById("asama").innerText=asama;
+      }
+    }
+    yeniSayi();
+  }
+  if(sayi.y>500) yeniSayi();
+}
+
+function dongu(){ guncelle(); ciz(); requestAnimationFrame(dongu); }
+dongu();
+
+window.addEventListener("keydown", (e)=>{
+  if(!aktif) return;
+  if(e.key==="ArrowLeft") sepet.x-=20;
+  if(e.key==="ArrowRight") sepet.x+=20;
+  if(e.key==="ArrowUp") sepet.y-=10;
+  if(e.key==="ArrowDown") sepet.y+=10;
+  if(sepet.x<0) sepet.x=0;
+  if(sepet.x>350) sepet.x=350;
+  if(sepet.y<400) sepet.y=400;
+  if(sepet.y>450) sepet.y=450;
+});
+</script>
+
+</body>
+</html>
