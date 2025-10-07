@@ -40,7 +40,7 @@ const arkaPlanRenk="#87CEEB";
 const toprakRenk="#8B4513";
 const toprakY=450;
 
-// Rastgele rasyonel sayı oluştur (kesir)
+// Rastgele rasyonel sayı
 function rasyonelSayi(min=-2,max=2){
   let pay = Math.floor(Math.random()*((max-min)*4)+min*4);
   let payda = [2,3,4][Math.floor(Math.random()*3)];
@@ -49,43 +49,56 @@ function rasyonelSayi(min=-2,max=2){
 }
 
 // Rastgele sayı oluştur
-function rastgeleSayi(asamaIndex, pozisyonlar){
+function rastgeleSayi(asamaIndex, pozisyonlar, index){
   let s={x:Math.random()*350, y:-20, dogru:true, deger:0};
   if(asamaIndex===1){ 
-    // 1 sayı yanlış: rasyonel veya negatif
-    s.deger=Math.random()<0.5?rasyonelSayi(): -Math.floor(Math.random()*10);
-    s.dogru=isNaN(parseInt(s.deger))?false:s.deger>=0 && Number.isInteger(Number(s.deger));
+    if(index===0){ // doğru doğal sayı
+      s.deger=Math.floor(Math.random()*10);
+      s.dogru=true;
+    } else { // yanlış sayı
+      s.deger=Math.random()<0.5?rasyonelSayi(): -Math.floor(Math.random()*10);
+      s.dogru=false;
+    }
   } else if(asamaIndex===2){
-    // 1 sayı yanlış: rasyonel sayı
-    s.deger=Math.random()<0.5?rasyonelSayi(): Math.floor(Math.random()*21)-10;
-    s.dogru=Number.isInteger(s.deger)?true:false;
-  } else {
-    // 3. aşama: tüm sayılar doğru rasyonel
+    if(index===0){ // doğru tam sayı
+      s.deger=Math.floor(Math.random()*21)-10;
+      s.dogru=true;
+    } else { // yanlış rasyonel
+      s.deger=rasyonelSayi();
+      s.dogru=false;
+    }
+  } else { // 3. aşama tüm doğru rasyonel
     s.deger=rasyonelSayi();
     s.dogru=true;
   }
-  // X pozisyonu ayarla (iç içe olmaması)
+  // İç içe olmaması
   while(pozisyonlar.some(p=>Math.abs(p-s.x)<50)){
     s.x=Math.random()*350;
   }
+  pozisyonlar.push(s.x);
   return s;
 }
 
-// Sayıları oluştur
+// Sayıları ve siyah topları oluştur
 function sayilariOlustur(){
   sayilar=[];
   siyahToplar=[];
   let pozisyonlar=[];
   // 2 sayı
-  let s1 = rastgeleSayi(asama, pozisyonlar); pozisyonlar.push(s1.x); sayilar.push(s1);
+  let s1 = rastgeleSayi(asama, pozisyonlar,0); sayilar.push(s1);
   setTimeout(()=>{
-    let s2 = rastgeleSayi(asama, pozisyonlar); sayilar.push(s2);
+    let s2 = rastgeleSayi(asama, pozisyonlar,1); sayilar.push(s2);
   },1000);
 
-  // 1 siyah top
-  let t = {x:Math.random()*350, y:-20, r:15};
-  while(pozisyonlar.some(p=>Math.abs(p-t.x)<50)){ t.x=Math.random()*350; }
-  siyahToplar.push(t);
+  // Siyah top(lar)
+  let siyahSayisi = asama===3?2:1;
+  for(let i=0;i<siyahSayisi;i++){
+    setTimeout(()=>{
+      let t={x:Math.random()*350, y:-20, r:15};
+      while(pozisyonlar.some(p=>Math.abs(p-t.x)<50)) t.x=Math.random()*350;
+      siyahToplar.push(t);
+    },500);
+  }
 }
 
 // Çizim
@@ -112,7 +125,7 @@ function ciz(){
   // Sepet
   ctx.fillStyle="#FF8C00";
   ctx.fillRect(sepet.x,sepet.y,sepet.w,sepet.h);
-  ctx.fillStyle="#FFB74D"; // tente
+  ctx.fillStyle="#FFB74D"; 
   ctx.fillRect(sepet.x-5,sepet.y-15,sepet.w+10,10);
 
   // Sayılar
@@ -142,11 +155,9 @@ function guncelle(){
   sayilar.forEach(s=>{
     s.y+=hiz;
     if(s.y>sepet.y-20 && s.x>sepet.x-10 && s.x<sepet.x+sepet.w+10){
-      if(!s.dogru) puan-=10; else puan+=10;
+      if(s.dogru) puan+=10;
       sayilar = sayilar.filter(x=>x!==s);
-    }
-    else if(s.y>toprakY){
-      if(!s.dogru) puan+=10;
+    } else if(s.y>toprakY){
       sayilar = sayilar.filter(x=>x!==s);
     }
   });
@@ -157,8 +168,7 @@ function guncelle(){
     if(t.y>sepet.y-10 && t.x>sepet.x-10 && t.x<sepet.x+sepet.w+10){
       puan-=10;
       siyahToplar = siyahToplar.filter(x=>x!==t);
-    } 
-    else if(t.y>toprakY){
+    } else if(t.y>toprakY){
       siyahToplar = siyahToplar.filter(x=>x!==t);
     }
   });
@@ -208,7 +218,6 @@ canvas.addEventListener("touchmove",(e)=>{
 canvas.addEventListener("click",()=>{
   if(baslamaEkrani){
     if(oyunBitti){
-      // Baştan başlat
       asama=1; puan=0; hiz=3; oyunBitti=false;
     }
     baslamaEkrani=false;
