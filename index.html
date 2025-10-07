@@ -25,15 +25,17 @@
 const canvas = document.getElementById("oyun");
 const ctx = canvas.getContext("2d");
 
-let sepet = {x:180, y:420, w:50, h:30};
+let sepet = {x:180, y:420, w:60, h:30};
 let sayi = {x:200, y:-20, deger:0};
 let puan=0, kalp=3, asama=1;
-let hiz=2, aktif=true;
+let hiz=2;
+let oyunAktif=false; // başlamak için tıklama bekliyor
 
-const arkaPlanRenk="#87CEEB"; // gökyüzü
+const arkaPlanRenk="#87CEEB";
 const toprakRenk="#8B4513";
 const toprakY=450;
 
+// Rastgele sayı üret
 function yeniSayi() {
   if(asama===1) sayi.deger=Math.floor(Math.random()*10);
   else if(asama===2) sayi.deger=Math.floor(Math.random()*21)-10;
@@ -41,63 +43,115 @@ function yeniSayi() {
   sayi.x=Math.random()*350;
   sayi.y=-20;
 }
-yeniSayi();
 
+// Çizim fonksiyonu
 function ciz() {
   ctx.fillStyle=arkaPlanRenk;
   ctx.fillRect(0,0,canvas.width,canvas.height);
+
   ctx.fillStyle=toprakRenk;
   ctx.fillRect(0,toprakY,canvas.width,canvas.height-toprakY);
+
+  if(!oyunAktif){
+    ctx.fillStyle="black";
+    ctx.font="25px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("Başlamak için tıklayın", canvas.width/2, canvas.height/2);
+    return;
+  }
+
+  // Sepet
   ctx.fillStyle="#FF8C00";
   ctx.fillRect(sepet.x,sepet.y,sepet.w,sepet.h);
+  // Tente
+  ctx.fillStyle="#FFB74D";
+  ctx.fillRect(sepet.x-5,sepet.y-15,sepet.w+10,10);
+
+  // Sayı
   ctx.fillStyle="#1565c0";
-  ctx.font="20px Arial";
+  ctx.font="30px Arial";
   ctx.fillText(sayi.deger,sayi.x,sayi.y);
-  if(!aktif){ ctx.fillStyle="red"; ctx.font="30px Arial"; ctx.fillText("Oyun Bitti!",100,250); }
+
+  if(kalp<=0){
+    ctx.fillStyle="red";
+    ctx.font="30px Arial";
+    ctx.fillText("Oyun Bitti!",canvas.width/2,canvas.height/2);
+    oyunAktif=false;
+  }
 }
 
+// Güncelleme
 function guncelle() {
-  if(!aktif) return;
+  if(!oyunAktif) return;
   sayi.y+=hiz;
-  if(sayi.y>sepet.y-10 && sayi.x>sepet.x-10 && sayi.x<sepet.x+sepet.w){
+
+  if(sayi.y>sepet.y-20 && sayi.x>sepet.x-10 && sayi.x<sepet.x+sepet.w+10){
     let dogru=false;
     if(asama===1 && sayi.deger>=0 && Number.isInteger(Number(sayi.deger))) dogru=true;
     if(asama===2 && Number.isInteger(Number(sayi.deger))) dogru=true;
     if(asama===3) dogru=true;
+
     if(dogru) puan+=10; else kalp--;
+
     document.getElementById("puan").innerText=puan;
     document.getElementById("kalp").innerText=kalp;
-    if(kalp<=0) aktif=false;
+
+    if(kalp<=0) oyunAktif=false;
+
     if(puan>=200){
       asama++;
-      if(asama>3) aktif=false;
+      if(asama>3) oyunAktif=false;
       else{
-        puan=0;
-        kalp=3;
-        hiz+=1;
+        puan=0; kalp=3; hiz+=1;
         document.getElementById("asama").innerText=asama;
       }
     }
     yeniSayi();
   }
+
   if(sayi.y>500) yeniSayi();
 }
 
+// Oyun döngüsü
 function dongu(){ guncelle(); ciz(); requestAnimationFrame(dongu); }
 dongu();
 
-window.addEventListener("keydown", (e)=>{
-  if(!aktif) return;
+// Klavye kontrolleri
+window.addEventListener("keydown",(e)=>{
+  if(!oyunAktif) return;
   if(e.key==="ArrowLeft") sepet.x-=20;
   if(e.key==="ArrowRight") sepet.x+=20;
-  if(e.key==="ArrowUp") sepet.y-=10;
-  if(e.key==="ArrowDown") sepet.y+=10;
   if(sepet.x<0) sepet.x=0;
-  if(sepet.x>350) sepet.x=350;
-  if(sepet.y<400) sepet.y=400;
-  if(sepet.y>450) sepet.y=450;
+  if(sepet.x>340) sepet.x=340;
 });
-</script>
 
+// Dokunmatik kontroller
+let baslamaX=null;
+canvas.addEventListener("touchstart",(e)=>{
+  if(!oyunAktif) return;
+  baslamaX=e.touches[0].clientX;
+});
+canvas.addEventListener("touchmove",(e)=>{
+  if(!oyunAktif) return;
+  let hareket=e.touches[0].clientX-baslamaX;
+  sepet.x+=hareket;
+  if(sepet.x<0) sepet.x=0;
+  if(sepet.x>340) sepet.x=340;
+  baslamaX=e.touches[0].clientX;
+});
+
+// Başlamak için tıklama
+canvas.addEventListener("click",()=>{
+  if(!oyunAktif){
+    oyunAktif=true;
+    puan=0; kalp=3; asama=1; hiz=2;
+    document.getElementById("puan").innerText=puan;
+    document.getElementById("kalp").innerText=kalp;
+    document.getElementById("asama").innerText=asama;
+    yeniSayi();
+  }
+});
+
+</script>
 </body>
 </html>
