@@ -16,7 +16,7 @@
 <div id="bilgi">
   <h2>🎯 Sayı Sepeti Oyunu</h2>
   <div id="yapan">Yapan: <strong>Mete ÜLKER</strong></div>
-  <p>Aşama: <span id="asama">1</span> | ❤️ <span id="kalp">3</span> | Puan: <span id="puan">0</span></p>
+  <p>Aşama: <span id="asama">1</span> | ❤️ <span id="kalp">2</span> | Puan: <span id="puan">0</span></p>
 </div>
 
 <canvas id="oyun" width="400" height="500"></canvas>
@@ -26,36 +26,61 @@ const canvas = document.getElementById("oyun");
 const ctx = canvas.getContext("2d");
 
 let sepet = {x:180, y:420, w:60, h:30};
-let sayi = {x:200, y:-20, deger:0};
-let puan=0, kalp=3, asama=1;
+let puan=0, kalp=2, asama=1;
 let hiz=2;
 let oyunAktif=false;
 let baslamaEkrani=true;
 let asamaBasladi=false;
 
-// Arka plan ve toprak
+let sayilar = []; // Ekrandaki düşen sayılar
+
 const arkaPlanRenk="#87CEEB";
 const toprakRenk="#8B4513";
 const toprakY=450;
 
-// Rastgele sayı üret
-function yeniSayi() {
-  if(asama===1) sayi.deger=Math.floor(Math.random()*10);
-  else if(asama===2) sayi.deger=Math.floor(Math.random()*21)-10;
-  else sayi.deger=(Math.random()*4-2).toFixed(1);
-  sayi.x=Math.random()*350;
-  sayi.y=-20;
+// Rastgele sayı oluştur
+function rastgeleSayi() {
+  let deger, dogru;
+  if(asama===1){ // Doğal sayılar
+    deger=Math.floor(Math.random()*10);
+    dogru=true;
+  } else if(asama===2){ // Tam sayılar
+    deger=Math.floor(Math.random()*21)-10;
+    dogru=true;
+  } else { // Rasyonel sayılar
+    deger=(Math.random()*4-2).toFixed(1);
+    dogru=true;
+  }
+  return {x:Math.random()*350, y:-20, deger:deger, dogru:dogru};
 }
 
-// Çizim fonksiyonu
-function ciz() {
+// Ekrana sayılar ekle
+function sayilariOlustur(){
+  sayilar=[];
+  let adet = Math.floor(Math.random()*4)+2; // 2-5 sayı
+  let pozisyonlar=[];
+  for(let i=0;i<adet;i++){
+    let yeniSayi;
+    do{
+      yeniSayi = rastgeleSayi();
+    }while(pozisyonlar.some(p=>Math.abs(p-yeniSayi.x)<50));
+    pozisyonlar.push(yeniSayi.x);
+    sayilar.push(yeniSayi);
+  }
+  // 1 tane yanlış/hasar veren sayı ekle
+  let idx = Math.floor(Math.random()*sayilar.length);
+  sayilar[idx].dogru=false;
+}
+
+sayilariOlustur();
+
+// Çizim
+function ciz(){
   ctx.fillStyle=arkaPlanRenk;
   ctx.fillRect(0,0,canvas.width,canvas.height);
-
   ctx.fillStyle=toprakRenk;
   ctx.fillRect(0,toprakY,canvas.width,canvas.height-toprakY);
 
-  // Başlangıç veya aşama ekranı
   if(baslamaEkrani){
     ctx.fillStyle="black";
     ctx.font="25px Arial";
@@ -72,16 +97,15 @@ function ciz() {
   // Sepet
   ctx.fillStyle="#FF8C00";
   ctx.fillRect(sepet.x,sepet.y,sepet.w,sepet.h);
-  // Tente
-  ctx.fillStyle="#FFB74D";
+  ctx.fillStyle="#FFB74D"; // Tente
   ctx.fillRect(sepet.x-5,sepet.y-15,sepet.w+10,10);
 
-  // Sayı
-  ctx.fillStyle="#1565c0";
+  // Sayılar
   ctx.font="30px Arial";
-  ctx.fillText(sayi.deger,sayi.x,sayi.y);
+  ctx.fillStyle="#1565c0";
+  sayilar.forEach(s=> ctx.fillText(s.deger,s.x,s.y));
 
-  // Kalpler ve puan canvas üzerinde de görünür
+  // Kalpler ve puan
   ctx.fillStyle="red";
   ctx.font="20px Arial";
   ctx.fillText("❤️ ".repeat(kalp), 10, 30);
@@ -99,37 +123,39 @@ function ciz() {
 }
 
 // Güncelleme
-function guncelle() {
+function guncelle(){
   if(!oyunAktif) return;
-  sayi.y+=hiz;
-
-  if(sayi.y>sepet.y-20 && sayi.x>sepet.x-10 && sayi.x<sepet.x+sepet.w+10){
-    let dogru=false;
-    if(asama===1 && sayi.deger>=0 && Number.isInteger(Number(sayi.deger))) dogru=true;
-    if(asama===2 && Number.isInteger(Number(sayi.deger))) dogru=true;
-    if(asama===3) dogru=true;
-
-    if(dogru) puan+=10; else kalp--;
-
-    document.getElementById("puan").innerText=puan;
-    document.getElementById("kalp").innerText=kalp;
-
-    if(kalp<=0) { oyunAktif=false; baslamaEkrani=true; asamaBasladi=false; }
-
-    if(puan>=200){
-      asama++;
-      if(asama>3){ oyunAktif=false; baslamaEkrani=true; asamaBasladi=false; }
-      else{
-        puan=0; kalp=3; hiz+=1;
-        document.getElementById("asama").innerText=asama;
-        baslamaEkrani=true; // aşama ekranı
-        asamaBasladi=false;
-      }
+  sayilar.forEach(s=>{
+    s.y+=hiz;
+    // Sepete değdi mi?
+    if(s.y>sepet.y-20 && s.x>sepet.x-10 && s.x<sepet.x+sepet.w+10){
+      if(s.dogru) puan+=10; else kalp--;
+      sayilar = sayilar.filter(x=>x!==s);
+    } 
+    // Zemine değdi mi?
+    else if(s.y>toprakY){
+      if(s.dogru) puan-=10; else kalp--;
+      sayilar = sayilar.filter(x=>x!==s);
     }
-    yeniSayi();
-  }
+  });
 
-  if(sayi.y>500) yeniSayi();
+  if(sayilar.length==0) sayilariOlustur();
+
+  document.getElementById("puan").innerText=puan;
+  document.getElementById("kalp").innerText=kalp;
+
+  if(kalp<=0){ oyunAktif=false; baslamaEkrani=true; asamaBasladi=false; }
+
+  if(puan>=100){
+    asama++;
+    if(asama>3){ oyunAktif=false; baslamaEkrani=true; asamaBasladi=false; }
+    else{
+      puan=0; kalp=2; hiz+=1;
+      document.getElementById("asama").innerText=asama;
+      baslamaEkrani=true;
+      asamaBasladi=false;
+    }
+  }
 }
 
 // Oyun döngüsü
@@ -160,18 +186,18 @@ canvas.addEventListener("touchmove",(e)=>{
   baslamaX=e.touches[0].clientX;
 });
 
-// Başlamak veya aşama başlatmak için tıklama
+// Başlama tıklaması
 canvas.addEventListener("click",()=>{
   if(baslamaEkrani){
     baslamaEkrani=false;
     oyunAktif=true;
     if(!asamaBasladi){
-      puan=0; kalp=3; hiz=2;
+      puan=0; kalp=2; hiz=2;
       document.getElementById("puan").innerText=puan;
       document.getElementById("kalp").innerText=kalp;
       document.getElementById("asama").innerText=asama;
       asamaBasladi=true;
-      yeniSayi();
+      sayilariOlustur();
     }
   }
 });
