@@ -29,8 +29,11 @@ let sepet = {x:180, y:420, w:60, h:30};
 let sayi = {x:200, y:-20, deger:0};
 let puan=0, kalp=3, asama=1;
 let hiz=2;
-let oyunAktif=false; // başlamak için tıklama bekliyor
+let oyunAktif=false;
+let baslamaEkrani=true;
+let asamaBasladi=false;
 
+// Arka plan ve toprak
 const arkaPlanRenk="#87CEEB";
 const toprakRenk="#8B4513";
 const toprakY=450;
@@ -52,11 +55,17 @@ function ciz() {
   ctx.fillStyle=toprakRenk;
   ctx.fillRect(0,toprakY,canvas.width,canvas.height-toprakY);
 
-  if(!oyunAktif){
+  // Başlangıç veya aşama ekranı
+  if(baslamaEkrani){
     ctx.fillStyle="black";
     ctx.font="25px Arial";
     ctx.textAlign="center";
-    ctx.fillText("Başlamak için tıklayın", canvas.width/2, canvas.height/2);
+    if(!asamaBasladi) ctx.fillText("Başlamak için tıklayın", canvas.width/2, canvas.height/2);
+    else {
+      let asamaYazi = asama===1 ? "Doğal Sayılar" : asama===2 ? "Tam Sayılar" : "Rasyonel Sayılar";
+      ctx.fillText("Aşama "+asama+": "+asamaYazi, canvas.width/2, canvas.height/2-20);
+      ctx.fillText("Başlamak için dokun", canvas.width/2, canvas.height/2+20);
+    }
     return;
   }
 
@@ -72,11 +81,20 @@ function ciz() {
   ctx.font="30px Arial";
   ctx.fillText(sayi.deger,sayi.x,sayi.y);
 
+  // Kalpler ve puan canvas üzerinde de görünür
+  ctx.fillStyle="red";
+  ctx.font="20px Arial";
+  ctx.fillText("❤️ ".repeat(kalp), 10, 30);
+  ctx.fillStyle="black";
+  ctx.fillText("Puan: "+puan, 300, 30);
+
   if(kalp<=0){
     ctx.fillStyle="red";
     ctx.font="30px Arial";
     ctx.fillText("Oyun Bitti!",canvas.width/2,canvas.height/2);
     oyunAktif=false;
+    baslamaEkrani=true;
+    asamaBasladi=false;
   }
 }
 
@@ -96,14 +114,16 @@ function guncelle() {
     document.getElementById("puan").innerText=puan;
     document.getElementById("kalp").innerText=kalp;
 
-    if(kalp<=0) oyunAktif=false;
+    if(kalp<=0) { oyunAktif=false; baslamaEkrani=true; asamaBasladi=false; }
 
     if(puan>=200){
       asama++;
-      if(asama>3) oyunAktif=false;
+      if(asama>3){ oyunAktif=false; baslamaEkrani=true; asamaBasladi=false; }
       else{
         puan=0; kalp=3; hiz+=1;
         document.getElementById("asama").innerText=asama;
+        baslamaEkrani=true; // aşama ekranı
+        asamaBasladi=false;
       }
     }
     yeniSayi();
@@ -140,18 +160,21 @@ canvas.addEventListener("touchmove",(e)=>{
   baslamaX=e.touches[0].clientX;
 });
 
-// Başlamak için tıklama
+// Başlamak veya aşama başlatmak için tıklama
 canvas.addEventListener("click",()=>{
-  if(!oyunAktif){
+  if(baslamaEkrani){
+    baslamaEkrani=false;
     oyunAktif=true;
-    puan=0; kalp=3; asama=1; hiz=2;
-    document.getElementById("puan").innerText=puan;
-    document.getElementById("kalp").innerText=kalp;
-    document.getElementById("asama").innerText=asama;
-    yeniSayi();
+    if(!asamaBasladi){
+      puan=0; kalp=3; hiz=2;
+      document.getElementById("puan").innerText=puan;
+      document.getElementById("kalp").innerText=kalp;
+      document.getElementById("asama").innerText=asama;
+      asamaBasladi=true;
+      yeniSayi();
+    }
   }
 });
-
 </script>
 </body>
 </html>
