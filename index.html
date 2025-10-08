@@ -40,7 +40,7 @@ const arkaPlanRenk="#87CEEB";
 const toprakRenk="#8B4513";
 const toprakY=450;
 
-// Rastgele rasyonel sayı
+// Rasyonel sayı üretici
 function rasyonelSayi(min=-2,max=2){
   let pay = Math.floor(Math.random()*((max-min)*4)+min*4);
   let payda = [2,3,4][Math.floor(Math.random()*3)];
@@ -50,28 +50,40 @@ function rasyonelSayi(min=-2,max=2){
 
 // Rastgele sayı oluştur
 function rastgeleSayi(asamaIndex, pozisyonlar, index){
-  let s={x:Math.random()*350, y:-20, dogru:true, deger:0};
+  let s={x:Math.random()*350, y:-20, dogru:true, deger:0, tip:"dogal"};
+  
   if(asamaIndex===1){ 
     if(index===0){ // doğru doğal sayı
       s.deger=Math.floor(Math.random()*10);
+      s.tip="dogal";
       s.dogru=true;
-    } else { // yanlış sayı
-      s.deger=Math.random()<0.5?rasyonelSayi(): -Math.floor(Math.random()*10);
+    } else { // yanlış sayı: negatif veya rasyonel
+      if(Math.random()<0.5){
+        s.deger = -Math.floor(Math.random()*10);
+        s.tip="negatif";
+      } else {
+        s.deger = rasyonelSayi();
+        s.tip="rasyonel";
+      }
       s.dogru=false;
     }
   } else if(asamaIndex===2){
     if(index===0){ // doğru tam sayı
       s.deger=Math.floor(Math.random()*21)-10;
+      s.tip="tam";
       s.dogru=true;
     } else { // yanlış rasyonel
       s.deger=rasyonelSayi();
+      s.tip="rasyonel";
       s.dogru=false;
     }
-  } else { // 3. aşama tüm doğru rasyonel
+  } else { // 3. aşama: tümü doğru rasyonel
     s.deger=rasyonelSayi();
+    s.tip="rasyonel";
     s.dogru=true;
   }
-  // İç içe olmaması
+
+  // İç içe olmasın
   while(pozisyonlar.some(p=>Math.abs(p-s.x)<50)){
     s.x=Math.random()*350;
   }
@@ -79,18 +91,19 @@ function rastgeleSayi(asamaIndex, pozisyonlar, index){
   return s;
 }
 
-// Sayıları ve siyah topları oluştur
+// Sayı ve top oluşturucu
 function sayilariOlustur(){
   sayilar=[];
   siyahToplar=[];
   let pozisyonlar=[];
+  
   // 2 sayı
   let s1 = rastgeleSayi(asama, pozisyonlar,0); sayilar.push(s1);
   setTimeout(()=>{
     let s2 = rastgeleSayi(asama, pozisyonlar,1); sayilar.push(s2);
   },1000);
 
-  // Siyah top(lar)
+  // Siyah toplar
   let siyahSayisi = asama===3?2:1;
   for(let i=0;i<siyahSayisi;i++){
     setTimeout(()=>{
@@ -101,7 +114,7 @@ function sayilariOlustur(){
   }
 }
 
-// Çizim
+// Çizim fonksiyonu
 function ciz(){
   ctx.fillStyle=arkaPlanRenk;
   ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -130,8 +143,10 @@ function ciz(){
 
   // Sayılar
   ctx.font="30px Arial";
-  ctx.fillStyle="#1565c0";
-  sayilar.forEach(s=> ctx.fillText(s.deger,s.x,s.y));
+  sayilar.forEach(s=>{
+    ctx.fillStyle = s.tip==="rasyonel" ? "#009688" : "#1565c0";
+    ctx.fillText(s.deger,s.x,s.y);
+  });
 
   // Siyah toplar
   siyahToplar.forEach(t=>{
@@ -151,13 +166,21 @@ function ciz(){
 function guncelle(){
   if(!oyunAktif) return;
 
-  // Sayıları düşür
+  // Sayılar
   sayilar.forEach(s=>{
     s.y+=hiz;
+
+    // Sepete değerse
     if(s.y>sepet.y-20 && s.x>sepet.x-10 && s.x<sepet.x+sepet.w+10){
-      if(s.dogru) puan+=10;
+      if(s.tip==="rasyonel" && asama<3){ // Rasyonel sayılar hasar verir (1. ve 2. aşama)
+        puan-=10;
+      } else if(s.dogru) { // Doğru sayıysa
+        puan+=10;
+      }
       sayilar = sayilar.filter(x=>x!==s);
-    } else if(s.y>toprakY){
+    } 
+    // Yere düşerse
+    else if(s.y>toprakY){
       sayilar = sayilar.filter(x=>x!==s);
     }
   });
@@ -173,16 +196,34 @@ function guncelle(){
     }
   });
 
-  if(sayilar.length==0 && siyahToplar.length==0){
+  // Aşama geçişi
+  if(puan>=60){
+    asama++;
     if(asama>3){
       oyunBitti=true;
       baslamaEkrani=true;
+      oyunAktif=false;
+      return;
     } else {
-      sayilariOlustur();
+      baslamaEkrani=true;
+      oyunAktif=false;
+      asamaBasladi=true;
+      hiz+=1;
+      document.getElementById("asama").innerText=asama;
+      return;
     }
   }
 
-  if(puan<0) puan=0;
+  // Puan 0 altına inerse
+  if(puan<0){
+    puan=0;
+    asama=1;
+    hiz=3;
+    oyunAktif=false;
+    baslamaEkrani=true;
+    asamaBasladi=false;
+  }
+
   document.getElementById("puan").innerText=puan;
 }
 
@@ -199,7 +240,7 @@ window.addEventListener("keydown",(e)=>{
   if(sepet.x>340) sepet.x=340;
 });
 
-// Dokunmatik kontroller
+// Dokunmatik
 let baslamaX=null;
 canvas.addEventListener("touchstart",(e)=>{
   if(!oyunAktif) return;
@@ -214,7 +255,7 @@ canvas.addEventListener("touchmove",(e)=>{
   baslamaX=e.touches[0].clientX;
 });
 
-// Başlama tıklaması
+// Tıklama başlatma
 canvas.addEventListener("click",()=>{
   if(baslamaEkrani){
     if(oyunBitti){
