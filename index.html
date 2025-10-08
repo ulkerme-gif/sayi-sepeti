@@ -1,274 +1,448 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Sayı Sepeti Oyunu</title>
 <style>
-  body { margin:0; overflow:hidden; font-family:sans-serif; }
-  canvas { display:block; margin:auto; margin-top:20px; border:3px solid #ff9800; }
-  #bilgi { text-align:center; font-size:18px; color:#333; }
-  #yapan { font-size:16px; color:#555; margin-top:-10px; margin-bottom:10px; }
+  :root{--width:400px;--height:500px}
+  body{margin:0;display:flex;flex-direction:column;align-items:center;font-family:Segoe UI,Roboto,Arial;background:#87CEEB;}
+  #bilgi{width:var(--width);text-align:center;margin-top:8px;color:#222}
+  canvas{display:block;margin-top:10px;border:3px solid #ff9800;background:transparent}
+  /* animasyon metinleri */
+  .floating {
+    position: absolute;
+    left:50%;
+    transform:translateX(-50%);
+    font-weight:700;
+    pointer-events:none;
+  }
 </style>
 </head>
 <body>
+  <div id="bilgi">
+    <h2>🎯 Sayı Sepeti Oyunu</h2>
+    <div>Yapan: <strong>Mete ÜLKER</strong></div>
+    <p>Aşama: <span id="asama">1</span> | Puan: <span id="puan">0</span></p>
+  </div>
 
-<div id="bilgi">
-  <h2>🎯 Sayı Sepeti Oyunu</h2>
-  <div id="yapan">Yapan: <strong>Mete ÜLKER</strong></div>
-  <p>Aşama: <span id="asama">1</span> | Puan: <span id="puan">0</span></p>
-</div>
-
-<canvas id="oyun" width="400" height="500"></canvas>
+  <canvas id="game" width="400" height="500"></canvas>
 
 <script>
-const canvas = document.getElementById("oyun");
-const ctx = canvas.getContext("2d");
+/* ---------------------------
+  Tüm oyun: görsel efektli sürüm
+   - doğru: +10 (yeşil parlama)
+   - yanlış: puan vermez
+   - rasyonel sayılar 1.2 aşamada hasar verir (-10) (3.'te vermez)
+   - siyah top sepete çarparsa -10
+   - 2 sayı ardışık (1s arayla), siyah top(lar) 0.5s sonra
+   - 3. aşamada 2 siyah top
+   - aşama geçişi @60 puan, hız artar, arka plan renk değişir
+   - görsel efektler: doğru (yeşil pulse), yanlış/siyah (kırmızı shake), aşama patlaması, gece yıldızları
+----------------------------*/
 
-let sepet = {x:180, y:420, w:60, h:30};
-let puan=0, asama=1;
-let hiz=3;
-let oyunAktif=false;
-let baslamaEkrani=true;
-let asamaBasladi=false;
-let oyunBitti=false;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
 
-let sayilar = [];
-let siyahToplar = [];
+let sepet = {x: 170, y: 420, w: 60, h: 30}; // başlangıç
+let puan = 0, asama = 1;
+let hiz = 3;
+let oyunAktif = false, baslamaEkrani = true, asamaBasladi = false, oyunBitti = false;
 
-const arkaPlanRenk="#87CEEB";
-const toprakRenk="#8B4513";
-const toprakY=450;
+let sayilar = [];      // {x,y,deger,tip,dogru}
+let siyahToplar = [];  // {x,y,r}
 
-// Rasyonel sayı üretici
+const toprakY = 450;
+
+// efekt kontrol değişkenleri
+let effects = {
+  greenPulses: [], // {x,y,r,maxR,alpha}
+  redShake: 0,     // süre ms
+  levelBursts: [], // {x,y,r,maxR,alpha}
+  skyPhase: 0      // 0..1 arası, aşamaya göre hızlanır
+};
+
+// utility: rasyonel string üret
 function rasyonelSayi(min=-2,max=2){
-  let pay = Math.floor(Math.random()*((max-min)*4)+min*4);
-  let payda = [2,3,4][Math.floor(Math.random()*3)];
-  if(pay===0) pay=1;
-  return pay+"/"+payda;
+  const paydaList = [2,3,4];
+  const pay = Math.floor(Math.random()*((max-min)*4)+min*4) || 1;
+  const payda = paydaList[Math.floor(Math.random()*paydaList.length)];
+  return (pay) + "/" + payda;
 }
 
-// Rastgele sayı oluştur
+// X pozunu pozisyonlar dikkate alarak ayarla
+function randomXAvoid(existing){
+  let x;
+  let tries=0;
+  do{
+    x = Math.floor(Math.random()*(W-40)) + 20;
+    tries++;
+  }while(existing.some(p=>Math.abs(p-x)<60) && tries<50);
+  return x;
+}
+
+// rastgele sayı oluştur (kurallara göre)
 function rastgeleSayi(asamaIndex, pozisyonlar, index){
-  let s={x:Math.random()*350, y:-20, dogru:true, deger:0, tip:"dogal"};
-  
-  if(asamaIndex===1){ 
-    if(index===0){ // doğru doğal sayı
-      s.deger=Math.floor(Math.random()*10);
-      s.tip="dogal";
-      s.dogru=true;
-    } else { // yanlış sayı: negatif veya rasyonel
-      if(Math.random()<0.5){
-        s.deger = -Math.floor(Math.random()*10);
-        s.tip="negatif";
-      } else {
-        s.deger = rasyonelSayi();
-        s.tip="rasyonel";
-      }
+  let s = { x: randomXAvoid(pozisyonlar), y:-30, deger:null, tip:null, dogru:false };
+  if(asamaIndex===1){
+    if(index===0){
+      s.deger = Math.floor(Math.random()*10); s.tip='dogal'; s.dogru=true;
+    } else {
+      if(Math.random()<0.5){ s.deger = -Math.floor(Math.random()*10); s.tip='negatif'; }
+      else { s.deger = rasyonelSayi(); s.tip='rasyonel'; }
       s.dogru=false;
     }
   } else if(asamaIndex===2){
-    if(index===0){ // doğru tam sayı
-      s.deger=Math.floor(Math.random()*21)-10;
-      s.tip="tam";
-      s.dogru=true;
-    } else { // yanlış rasyonel
-      s.deger=rasyonelSayi();
-      s.tip="rasyonel";
-      s.dogru=false;
+    if(index===0){
+      s.deger = Math.floor(Math.random()*21)-10; s.tip='tam'; s.dogru=true;
+    } else {
+      s.deger = rasyonelSayi(); s.tip='rasyonel'; s.dogru=false;
     }
-  } else { // 3. aşama: tümü doğru rasyonel
-    s.deger=rasyonelSayi();
-    s.tip="rasyonel";
-    s.dogru=true;
+  } else {
+    // aşama 3: tüm rasyonel doğru
+    s.deger = rasyonelSayi(); s.tip='rasyonel'; s.dogru=true;
   }
-
-  // İç içe olmasın
-  while(pozisyonlar.some(p=>Math.abs(p-s.x)<50)){
-    s.x=Math.random()*350;
-  }
-  pozisyonlar.push(s.x);
   return s;
 }
 
-// Sayı ve top oluşturucu
+// yeni dalga oluşturma: 2 sayı ardışık, siyah top(lar) 0.5s sonra
 function sayilariOlustur(){
-  sayilar=[];
-  siyahToplar=[];
-  let pozisyonlar=[];
-  
-  // 2 sayı
-  let s1 = rastgeleSayi(asama, pozisyonlar,0); sayilar.push(s1);
+  if(!oyunAktif) return;
+  sayilar = []; siyahToplar = [];
+  let poz = [];
+  // 1. sayı
+  const s1 = rastgeleSayi(asama, poz, 0); poz.push(s1.x); sayilar.push(s1);
+  // 2. sayı 1s sonra
   setTimeout(()=>{
-    let s2 = rastgeleSayi(asama, pozisyonlar,1); sayilar.push(s2);
-  },1000);
+    if(!oyunAktif) return;
+    const s2 = rastgeleSayi(asama, poz, 1); poz.push(s2.x); sayilar.push(s2);
+  }, 1000);
 
-  // Siyah toplar
-  let siyahSayisi = asama===3?2:1;
+  // siyah toplar 0.5s sonra (asama3 => 2 top)
+  const siyahSayisi = asama===3 ? 2 : 1;
   for(let i=0;i<siyahSayisi;i++){
     setTimeout(()=>{
-      let t={x:Math.random()*350, y:-20, r:15};
-      while(pozisyonlar.some(p=>Math.abs(p-t.x)<50)) t.x=Math.random()*350;
-      siyahToplar.push(t);
-    },500);
+      if(!oyunAktif) return;
+      let tX = randomXAvoid(poz);
+      poz.push(tX);
+      siyahToplar.push({x:tX, y:-20, r:16});
+    }, 500 + i*100); // küçük gecikmeyle ayrışsın
   }
 }
 
-// Çizim fonksiyonu
-function ciz(){
-  ctx.fillStyle=arkaPlanRenk;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle=toprakRenk;
-  ctx.fillRect(0,toprakY,canvas.width,canvas.height-toprakY);
+// görsel efektleri ekle
+function addGreenPulse(x,y){
+  effects.greenPulses.push({x,y,r:8,maxR:60,alpha:1});
+}
+function addLevelBurst(x,y){
+  effects.levelBursts.push({x,y,r:10,maxR:120,alpha:1});
+}
+function triggerRedShake(ms=200){
+  effects.redShake = Math.max(effects.redShake, ms);
+}
 
-  if(baslamaEkrani){
-    ctx.fillStyle="black";
-    ctx.font="25px Arial";
-    ctx.textAlign="center";
-    if(oyunBitti) ctx.fillText("🎉 Oyunu kazandınız! Tekrar oynamak için dokunun",canvas.width/2,canvas.height/2);
-    else if(!asamaBasladi) ctx.fillText("Başlamak için tıklayın", canvas.width/2, canvas.height/2);
-    else {
-      let a = asama===1?"Doğal Sayılar":asama===2?"Tam Sayılar":"Rasyonel Sayılar";
-      ctx.fillText("Aşama "+asama+": "+a, canvas.width/2, canvas.height/2-20);
-      ctx.fillText("Başlamak için dokun", canvas.width/2, canvas.height/2+20);
-    }
-    return;
+// arka plan (gökyüzü) renkleri aşamalara göre belirlenir
+const skyColors = {
+  1: {from:'#bfe9ff', to:'#87CEEB'}, // sabah
+  2: {from:'#87CEEB', to:'#66b3ff'}, // öğle
+  3: {from:'#ffcc99', to:'#ff9966'}  // gün batımı (kazanınca gece olur)
+};
+
+// yıldız çizimi (kazanınca)
+function drawStars(alpha){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  for(let i=0;i<60;i++){
+    const sx = Math.random()*W;
+    const sy = Math.random()*H*0.6;
+    const s = Math.random()*2;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(sx, sy, s, s);
+  }
+  ctx.restore();
+}
+
+/* ------------------ OYUN DÖNGÜSÜ ------------------ */
+
+function drawScene(){
+  // arka plan: dinamik degrade / gece efekt
+  // skyPhase ilerlesin (hız aşamaya göre)
+  const speed = 0.0003 * (1 + asama*0.6); // daha yüksek aşama daha hızlı geçiş
+  effects.skyPhase = (effects.skyPhase + speed) % 1;
+
+  // interpolate color between from->to using skyPhase
+  const sc = skyColors[Math.min(asama,3)];
+  // create linear gradient
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, sc.from);
+  g.addColorStop(1, sc.to);
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  // Eğer oyun bittiyse gece yıldızları
+  if(oyunBitti){
+    // koyulaştır
+    ctx.fillStyle = 'rgba(0,0,60,0.4)';
+    ctx.fillRect(0,0,W,H);
+    drawStars(0.8);
   }
 
-  // Sepet
-  ctx.fillStyle="#FF8C00";
-  ctx.fillRect(sepet.x,sepet.y,sepet.w,sepet.h);
-  ctx.fillStyle="#FFB74D"; 
-  ctx.fillRect(sepet.x-5,sepet.y-15,sepet.w+10,10);
+  // toprak
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(0, toprakY, W, H - toprakY);
 
-  // Sayılar
-  ctx.font="30px Arial";
-  sayilar.forEach(s=>{
-    ctx.fillStyle = s.tip==="rasyonel" ? "#009688" : "#1565c0";
-    ctx.fillText(s.deger,s.x,s.y);
+  // sepet konumuna red shake offset
+  let shakeOffset = 0;
+  if(effects.redShake > 0){
+    shakeOffset = (Math.sin(Date.now()/30)*4);
+  }
+
+  // sepet
+  ctx.fillStyle = '#FF8C00';
+  ctx.fillRect(sepet.x + shakeOffset, sepet.y, sepet.w, sepet.h);
+  // tente
+  ctx.fillStyle = '#FFB74D';
+  ctx.fillRect(sepet.x -5 + shakeOffset, sepet.y - 15, sepet.w + 10, 10);
+
+  // draw numbers
+  ctx.font = "28px Arial";
+  ctx.textBaseline = 'middle';
+  sayilar.forEach(s => {
+    ctx.fillStyle = (s.tip === 'rasyonel') ? '#00695c' : '#1565c0';
+    ctx.fillText(String(s.deger), s.x, s.y);
   });
 
-  // Siyah toplar
+  // draw black balls
   siyahToplar.forEach(t=>{
-    ctx.fillStyle="black";
+    ctx.fillStyle = 'black';
     ctx.beginPath();
-    ctx.arc(t.x,t.y,t.r,0,Math.PI*2);
+    ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
     ctx.fill();
   });
 
-  // Puan
-  ctx.fillStyle="black";
-  ctx.font="20px Arial";
-  ctx.fillText("Puan: "+puan, 300, 30);
+  // green pulses
+  effects.greenPulses.forEach((p)=>{
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(0,200,0,${p.alpha*0.4})`;
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // level bursts (bright circles)
+  effects.levelBursts.forEach(b=>{
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(255,220,100,${b.alpha})`;
+    ctx.lineWidth = 3;
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+    ctx.stroke();
+  });
+
+  // puan metni üstte (DOM zaten gösteriyor; buraya istersek tekrar çizebiliriz)
 }
 
-// Güncelleme
-function guncelle(){
+/* ------------------ GÜNCELLE ------------------ */
+
+function update(ms){
+  // efekt zamanları
+  if(effects.redShake > 0){
+    effects.redShake -= 16;
+    if(effects.redShake < 0) effects.redShake = 0;
+  }
+  // update pulses
+  effects.greenPulses.forEach(p => {
+    p.r += 5;
+    p.alpha -= 0.06;
+  });
+  effects.greenPulses = effects.greenPulses.filter(p => p.alpha > 0 && p.r < p.maxR);
+
+  effects.levelBursts.forEach(b => {
+    b.r += 8;
+    b.alpha -= 0.04;
+  });
+  effects.levelBursts = effects.levelBursts.filter(b => b.alpha > 0 && b.r < b.maxR);
+
+  // hareket: sayılar ve toplar
   if(!oyunAktif) return;
+  sayilar.forEach(s => s.y += hiz);
+  siyahToplar.forEach(t => t.y += hiz);
 
-  // Sayılar
-  sayilar.forEach(s=>{
-    s.y+=hiz;
-
-    // Sepete değerse
-    if(s.y>sepet.y-20 && s.x>sepet.x-10 && s.x<sepet.x+sepet.w+10){
-      if(s.tip==="rasyonel" && asama<3){ // Rasyonel sayılar hasar verir (1. ve 2. aşama)
-        puan-=10;
-      } else if(s.dogru) { // Doğru sayıysa
-        puan+=10;
+  // çarpışma kontrolü (sepete)
+  // önce sayılar:
+  for(let i = sayilar.length -1; i >=0; i--){
+    const s = sayilar[i];
+    if(s.y > sepet.y - 18 && s.x > sepet.x - 8 && s.x < sepet.x + sepet.w + 8){
+      // sepete temas
+      // önce kaydet önceki puan
+      const prevPuan = puan;
+      if(s.tip === 'rasyonel' && asama < 3){
+        // rasyonel hasar 1-2. aşamada -> -10
+        puan -= 10;
+        triggerRed(); // kırmızı efekt
+        // eğer puan 0 iken -10 oluyorsa -> yeniden başlat (istek)
+        if(prevPuan === 0 && puan < 0){
+          resetGame();
+          return;
+        }
+      } else {
+        // doğruysa +10; yanlış ise hiç puan
+        if(s.dogru){
+          puan += 10;
+          addGreenPulse(sepet.x + sepet.w/2, sepet.y);
+        } else {
+          // yanlış sayılar toplanırsa puan vermez (sadece hafif kırmızı titreşim)
+          triggerRed();
+        }
       }
-      sayilar = sayilar.filter(x=>x!==s);
-    } 
-    // Yere düşerse
-    else if(s.y>toprakY){
-      sayilar = sayilar.filter(x=>x!==s);
+      sayilar.splice(i,1);
+    } else if(s.y > toprakY + 10){
+      // yere düştü: yanlış sayılar yere düştüğünde puan vermez (önceki isteklerde doğru olmayan yere düşerse +10, ama en son istekler yanlış sayılar puan vermez)
+      // ÖZEL KURAL: Yanlış sayılar yere düşse artık puan vermez (son değişiklik isteği)
+      // Bu sürümde yalnızca doğru toplanınca puan alınıyor; yere düşmenin etkisi yok.
+      sayilar.splice(i,1);
     }
-  });
+  }
 
-  // Siyah toplar
-  siyahToplar.forEach(t=>{
-    t.y+=hiz;
-    if(t.y>sepet.y-10 && t.x>sepet.x-10 && t.x<sepet.x+sepet.w+10){
-      puan-=10;
-      siyahToplar = siyahToplar.filter(x=>x!==t);
-    } else if(t.y>toprakY){
-      siyahToplar = siyahToplar.filter(x=>x!==t);
+  // siyah toplar çarpışma
+  for(let i = siyahToplar.length -1; i >=0; i--){
+    const t = siyahToplar[i];
+    if(t.y > sepet.y - 8 && t.x > sepet.x - 8 && t.x < sepet.x + sepet.w + 8){
+      const prevPuan = puan;
+      puan -= 10;
+      triggerRed();
+      if(prevPuan === 0 && puan < 0){
+        resetGame();
+        return;
+      }
+      siyahToplar.splice(i,1);
+    } else if(t.y > toprakY + 10){
+      // yere düştüyse etkisi yok
+      siyahToplar.splice(i,1);
     }
-  });
+  }
 
-  // Aşama geçişi
-  if(puan>=60){
+  // yeni dalga otomatik
+  if(sayilar.length === 0 && siyahToplar.length === 0 && oyunAktif){
+    setTimeout(()=>{ if(oyunAktif) sayilariOlustur(); }, 600);
+  }
+
+  // aşama geçişi
+  if(puan >= 60){
+    // level up
+    puan = 0; // genelde seviye atlarken puanı sıfırla (tercih)
     asama++;
-    if(asama>3){
-      oyunBitti=true;
-      baslamaEkrani=true;
-      oyunAktif=false;
-      return;
+    if(asama > 3){
+      oyunBitti = true;
+      oyunAktif = false;
+      baslamaEkrani = true;
+      addLevelBurst(W/2, H/2);
     } else {
-      baslamaEkrani=true;
-      oyunAktif=false;
-      asamaBasladi=true;
-      hiz+=1;
-      document.getElementById("asama").innerText=asama;
-      return;
+      // sıradaki aşama
+      oyunAktif = false;
+      baslamaEkrani = true;
+      asamaBasladi = true;
+      hiz += 1;
+      addLevelBurst(W/2, H/2);
     }
+    document.getElementById('asama').innerText = Math.min(asama,3);
+    document.getElementById('puan').innerText = puan;
   }
 
-  // Puan 0 altına inerse
-  if(puan<0){
-    puan=0;
-    asama=1;
-    hiz=3;
-    oyunAktif=false;
-    baslamaEkrani=true;
-    asamaBasladi=false;
-  }
+  if(puan < 0) { puan = 0; } // güvenlik
+  document.getElementById('puan').innerText = puan;
 
-  document.getElementById("puan").innerText=puan;
+  // azaltma efekt zaman azaltma
+  if(effects.redShake > 0) {
+    // handled above
+  }
 }
 
-// Oyun döngüsü
-function dongu(){ guncelle(); ciz(); requestAnimationFrame(dongu); }
-dongu();
+// kırmızı efekt tetikle
+function triggerRed(){
+  triggerRedShake(220);
+}
+function triggerRedShake(ms){
+  effects.redShake = Math.max(effects.redShake, ms);
+}
 
-// Klavye kontrolleri
-window.addEventListener("keydown",(e)=>{
+// reset (oyuncu sıfırda -10 yediğinde)
+function resetGame(){
+  // kısa görsel uyarı
+  effects.levelBursts.push({x:W/2,y:H/2,r:10,maxR:200,alpha:1});
+  // sıfırla
+  puan = 0; asama = 1; hiz = 3;
+  oyunAktif = false; baslamaEkrani = true; asamaBasladi=false; oyunBitti=false;
+  sayilar = []; siyahToplar = [];
+  document.getElementById('asama').innerText = asama;
+  document.getElementById('puan').innerText = puan;
+}
+
+// draw loop
+function loop(){
+  // temizle ve çiz
+  // dynamic sky handled inside drawScene
+  drawScene();
+
+  // render effects on top: pulses and bursts are drawn in drawScene already
+  // decrement effect alphas
+  // draw UI texts (already in DOM)
+  // draw any floating animations: handled by pulses/bursts
+
+  // update state
+  update();
+
+  // draw pulses on top (slightly above)
+  // (already included)
+
+  requestAnimationFrame(loop);
+}
+
+// başlangıç / kontroller
+window.addEventListener('keydown', e=>{
   if(!oyunAktif) return;
-  if(e.key==="ArrowLeft") sepet.x-=20;
-  if(e.key==="ArrowRight") sepet.x+=20;
-  if(sepet.x<0) sepet.x=0;
-  if(sepet.x>340) sepet.x=340;
+  if(e.key === 'ArrowLeft') sepet.x -= 20;
+  if(e.key === 'ArrowRight') sepet.x += 20;
+  if(sepet.x < 0) sepet.x = 0;
+  if(sepet.x > W - sepet.w) sepet.x = W - sepet.w;
 });
 
-// Dokunmatik
-let baslamaX=null;
-canvas.addEventListener("touchstart",(e)=>{
+// dokunmatik kaydırma
+let startX = null;
+canvas.addEventListener('touchstart', e=>{
   if(!oyunAktif) return;
-  baslamaX=e.touches[0].clientX;
+  startX = e.touches[0].clientX;
 });
-canvas.addEventListener("touchmove",(e)=>{
+canvas.addEventListener('touchmove', e=>{
   if(!oyunAktif) return;
-  let hareket=e.touches[0].clientX-baslamaX;
-  sepet.x+=hareket;
-  if(sepet.x<0) sepet.x=0;
-  if(sepet.x>340) sepet.x=340;
-  baslamaX=e.touches[0].clientX;
+  const nx = e.touches[0].clientX;
+  const dx = nx - startX;
+  sepet.x += dx;
+  if(sepet.x < 0) sepet.x = 0;
+  if(sepet.x > W - sepet.w) sepet.x = W - sepet.w;
+  startX = nx;
 });
 
-// Tıklama başlatma
-canvas.addEventListener("click",()=>{
+// tıklama: başlangıç / seviye başlatma / yeniden başlat
+canvas.addEventListener('click', ()=>{
   if(baslamaEkrani){
     if(oyunBitti){
-      asama=1; puan=0; hiz=3; oyunBitti=false;
+      // yeniden başlat komple
+      puan = 0; asama = 1; hiz = 3; oyunBitti = false;
+      document.getElementById('asama').innerText = asama;
+      document.getElementById('puan').innerText = puan;
     }
-    baslamaEkrani=false;
-    oyunAktif=true;
-    asamaBasladi=true;
+    baslamaEkrani = false;
+    oyunAktif = true;
+    asamaBasladi = true;
     sayilariOlustur();
-    document.getElementById("puan").innerText=puan;
-    document.getElementById("asama").innerText=asama;
+    document.getElementById('asama').innerText = asama;
+    document.getElementById('puan').innerText = puan;
   }
 });
+
+// Başlangıç döngüsünü başlat
+loop();
+
 </script>
 </body>
 </html>
